@@ -16,19 +16,26 @@ import Tweet from './Tweet';
 import { useNavigate } from "react-router-dom";
 import firebaseApp from './firebaseConfig';
 import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
+import { getFirestore, addDoc, collection, Timestamp, onSnapshot } from 'firebase/firestore';
 import { useState, useEffect } from 'react';
 
 function Home() {
 
   let navigate = useNavigate();
   const auth = getAuth(firebaseApp);
+  const db = getFirestore(firebaseApp);
 
   const [userProfile, setUserProfile] = useState('');
+  const [tweet, setTweet] = useState('');
+  const [tweets, setTweets] = useState([]);
+
+  const [buttonLoading, setButtonLoading] = useState(false);
 
   useEffect(()=> {
+
+     // Authentication
       onAuthStateChanged(auth, (user)=>{
         if(user) {
-          console.log(user);
           setUserProfile({
             email: user.email,
             name: user.displayName
@@ -38,7 +45,37 @@ function Home() {
         }
       });
 
+      // Retrieve tweets
+      onSnapshot(collection(db, "tweets"), snapshot => {
+        setTweets(snapshot.docs.map(t=>t.data()));
+      });
+
+      
   }, [])
+
+  const createTweet = () => {
+    setButtonLoading(true);
+    if(tweet !== ''){
+
+      const tweetData = {
+        body: tweet,
+        user_email: userProfile.email,
+        name: userProfile.name,
+        date_posted: Timestamp.now()
+      };
+
+      addDoc( collection(db, "tweets"), tweetData).then(()=>{
+        setTweet('');
+        setButtonLoading(false);
+      });
+
+
+    }else{
+      alert("Tweet cannot be empty!").then(()=>{
+        setButtonLoading(false)
+      });
+    }
+  }
 
   const logout = () => {
     signOut(auth).then(() => {
@@ -64,16 +101,25 @@ function Home() {
           <Card mt={5} p={5}>
             <FormControl>
                 <FormLabel>What's on your mind? 💬</FormLabel>
-                <Input type="text" />
+                <Input disabled={buttonLoading} type="text" onChange={(e)=>{setTweet(e.target.value)}} value={tweet} />
                 </FormControl>
-                <Button w="100px" colorScheme='twitter' mt={3} size="sm">Tweet</Button>
+                <Button isLoading={buttonLoading}  w="100px" colorScheme='twitter' mt={3} size="sm" onClick={createTweet}>Tweet</Button>
           </Card>
 
           <Divider my={5}></Divider>
 
-          <Tweet></Tweet>
-          <Tweet></Tweet>
-          <Tweet></Tweet>
+          {
+            tweets.map((tweetRecord)=> (
+                <Tweet
+                  key={tweetRecord.id}
+                  body={tweetRecord.body}
+                  email={tweetRecord.user_email}
+                  name={tweetRecord.name}
+                  date_posted={tweetRecord.date_posted.toDate().toString()}
+                ></Tweet>
+            ))
+          }
+          
 
         </Box>
       </Flex>
